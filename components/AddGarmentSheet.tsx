@@ -68,7 +68,12 @@ export default function AddGarmentSheet({
       setBlob(processed.blob);
       setPreview(URL.createObjectURL(processed.blob));
 
-      // Colors come from the pixels, never from the model.
+      const notes: string[] = [];
+      if (!processed.cutout) {
+        notes.push("Couldn't separate it from the background — a plainer backdrop works better.");
+      }
+
+      // Colours are measured from the cutout's pixels, never from the model.
       const palette = dominantColors(processed.pixels, 3);
       setColors(palette);
 
@@ -87,12 +92,12 @@ export default function AddGarmentSheet({
           warmth: analysis.warmth,
           formality: analysis.formality,
         });
-        if (analysis.confidence === "low") {
-          setNotice("The model wasn't confident — worth a check.");
-        }
+        if (analysis.confidence === "low") notes.push("The model wasn't confident — worth a check.");
       } else {
-        setNotice("Tagging is unavailable, so fill these in yourself.");
+        notes.push("Tagging is unavailable, so fill these in yourself.");
       }
+
+      setNotice(notes.join(" ") || null);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not read that image");
     } finally {
@@ -139,8 +144,9 @@ export default function AddGarmentSheet({
       {!preview ? (
         <div className="space-y-3 pb-2">
           <p className="text-sm text-ink-2">
-            Photograph the item flat against a plain background. Colors are measured from the
-            photo; the rest is auto-tagged.
+            Lay the item flat on a plain background that contrasts with it. Fitgod cuts the
+            background away so outfits show only the clothes — that works best when the surface
+            is one clear colour.
           </p>
 
           <label
@@ -183,7 +189,7 @@ export default function AddGarmentSheet({
             <img
               src={preview}
               alt="The garment you just added"
-              className="h-28 w-28 shrink-0 rounded-xl object-cover ring-1 ring-hairline"
+              className="h-28 w-28 shrink-0 rounded-xl bg-surface object-contain p-1 ring-1 ring-hairline"
             />
             <div className="flex flex-col justify-center gap-2">
               {busy && (

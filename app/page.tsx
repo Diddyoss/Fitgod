@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, Heart, Shuffle } from "lucide-react";
-import OutfitCollage from "@/components/OutfitCollage";
+import OutfitCollage, { type SlotPosition } from "@/components/OutfitCollage";
 import OutfitDeck from "@/components/OutfitDeck";
 import { useWardrobe } from "@/store/wardrobe";
 import { useOutfits } from "@/store/outfits";
 import { rankOutfits, resolveOutfit, wardrobeGaps } from "@/lib/rotation";
 import { formatLongDate, todayISO } from "@/lib/dates";
 import { fetchStylingNote, type StylingNote } from "@/lib/client/ai";
-import { CATEGORY_LABEL, outfitKey, type Outfit } from "@/lib/types";
+import { CATEGORIES, CATEGORY_LABEL, outfitKey, type Category, type Outfit } from "@/lib/types";
 
 export default function TodayPage() {
   const garments = useWardrobe((s) => s.garments);
@@ -52,6 +52,52 @@ export default function TodayPage() {
     () => (outfit ? resolveOutfit(outfit, garments) : null),
     [outfit, garments],
   );
+
+  const byCategory = useMemo(
+    () => ({
+      top: garments.filter((g) => g.category === "top"),
+      bottom: garments.filter((g) => g.category === "bottom"),
+      shoes: garments.filter((g) => g.category === "shoes"),
+    }),
+    [garments],
+  );
+
+  const idFor = (o: Outfit, c: Category) =>
+    c === "top" ? o.topId : c === "bottom" ? o.bottomId : o.shoesId;
+
+  const positions = useMemo(() => {
+    if (!outfit) return undefined;
+    const out: Partial<Record<Category, SlotPosition>> = {};
+    for (const c of CATEGORIES) {
+      const list = byCategory[c];
+      const i = list.findIndex((g) => g.id === idFor(outfit, c));
+      out[c] = { index: i < 0 ? 0 : i, total: list.length };
+    }
+    return out;
+  }, [outfit, byCategory]);
+
+  /** Swiping one piece swaps just that slot, wrapping around its category. */
+  const cyclePiece = useCallback(
+    (category: Category, direction: 1 | -1) => {
+      if (!outfit) return;
+      const list = byCategory[category];
+      if (list.length < 2) return;
+
+      const i = list.findIndex((g) => g.id === idFor(outfit, category));
+      const nextIndex = (((i < 0 ? 0 : i) + direction) % list.length + list.length) % list.length;
+      const nextId = list[nextIndex].id;
+
+      chooseForDate(date, {
+        topId: category === "top" ? nextId : outfit.topId,
+        bottomId: category === "bottom" ? nextId : outfit.bottomId,
+        shoesId: category === "shoes" ? nextId : outfit.shoesId,
+        score: 0,
+      });
+    },
+    [outfit, byCategory, chooseForDate, date],
+  );
+
+  const canSwapAny = CATEGORIES.some((c) => byCategory[c].length > 1);
 
   const isSaved = outfit ? saved.some((o) => outfitKey(o) === outfitKey(outfit)) : false;
   const wornToday = history.some((h) => h.date === date);
@@ -119,7 +165,19 @@ export default function TodayPage() {
         </h1>
       </header>
 
-      <OutfitCollage top={resolved.top} bottom={resolved.bottom} shoes={resolved.shoes} />
+      <OutfitCollage
+        top={resolved.top}
+        bottom={resolved.bottom}
+        shoes={resolved.shoes}
+        onCycle={cyclePiece}
+        positions={positions}
+      />
+
+      {canSwapAny && (
+        <p className="mt-2 text-center text-[11px] uppercase tracking-widest text-ink-2">
+          Swipe a piece to swap it
+        </p>
+      )}
 
       <div className="mt-4 min-h-[2.5rem]">
         {noteLoading ? (

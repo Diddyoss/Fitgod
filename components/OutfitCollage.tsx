@@ -1,20 +1,33 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, type PanInfo } from "framer-motion";
 import GarmentImage from "./GarmentImage";
-import SilhouetteSvg from "./SilhouetteSvg";
-import type { Garment } from "@/lib/types";
+import type { Category, Garment } from "@/lib/types";
 
 /**
- * Flat-lay: the user's own garment photos, arranged anatomically over a faint
- * silhouette. Frames are cover-cropped rather than background-removed — at this
- * size the crop reads clean, and background removal is a v2 concern.
+ * The outfit as it would hang: top, bottom, shoes stacked in a column, each in
+ * its own band so nothing overlaps. Garment photos are background-removed and
+ * trimmed on upload, so the pieces read as a single figure without needing a
+ * silhouette behind them.
+ *
+ * When `onCycle` is supplied each band becomes independently swipeable —
+ * dragging one piece sideways moves to the next garment in that category.
  */
-const PIECES = [
-  { key: "top", top: "7%", width: "58%", left: "21%", rotate: -3 },
-  { key: "bottom", top: "37%", width: "50%", left: "25%", rotate: 2 },
-  { key: "shoes", top: "72%", width: "38%", left: "31%", rotate: -2 },
-] as const;
+
+const BANDS = [
+  { key: "top" as const, height: "40%" },
+  { key: "bottom" as const, height: "38%" },
+  { key: "shoes" as const, height: "22%" },
+];
+
+/** Lower than the deck's threshold — these are smaller targets. */
+const COMMIT_OFFSET = 60;
+const COMMIT_VELOCITY = 400;
+
+export interface SlotPosition {
+  index: number;
+  total: number;
+}
 
 export default function OutfitCollage({
   top,
@@ -22,44 +35,83 @@ export default function OutfitCollage({
   shoes,
   animate = true,
   className = "",
+  onCycle,
+  positions,
 }: {
   top: Garment;
   bottom: Garment;
   shoes: Garment;
   animate?: boolean;
   className?: string;
+  onCycle?: (category: Category, direction: 1 | -1) => void;
+  positions?: Partial<Record<Category, SlotPosition>>;
 }) {
   const garments = { top, bottom, shoes };
 
   return (
     <div
-      className={`relative aspect-[3/4] w-full overflow-hidden rounded-3xl border border-hairline bg-surface ${className}`}
+      className={`relative flex w-full flex-col overflow-hidden rounded-3xl border border-hairline bg-surface ${className}`}
+      style={{ aspectRatio: "3 / 4" }}
     >
-      <SilhouetteSvg className="absolute inset-0 h-full w-full opacity-60" />
+      {BANDS.map((band, i) => {
+        const garment = garments[band.key];
+        const pos = positions?.[band.key];
+        const swipeable = Boolean(onCycle) && (pos?.total ?? 0) > 1;
 
-      {PIECES.map((piece, i) => {
-        const garment = garments[piece.key];
         return (
           <motion.div
-            key={piece.key}
-            className="absolute"
-            style={{ top: piece.top, left: piece.left, width: piece.width }}
-            initial={animate ? { opacity: 0, scale: 0.9, y: 16 } : false}
-            animate={{ opacity: 1, scale: 1, y: 0, rotate: piece.rotate }}
-            transition={{
-              type: "spring",
-              stiffness: 260,
-              damping: 20,
-              delay: animate ? i * 0.08 : 0,
-            }}
+            key={band.key}
+            className={`relative flex items-center justify-center px-4 ${
+              swipeable ? "no-touch-pan cursor-grab active:cursor-grabbing" : ""
+            }`}
+            style={{ height: band.height }}
+            drag={swipeable ? "x" : false}
+            dragSnapToOrigin
+            dragElastic={0.5}
+            dragMomentum={false}
+            onDragEnd={
+              swipeable
+                ? (_: unknown, info: PanInfo) => {
+                    const passed =
+                      Math.abs(info.offset.x) > COMMIT_OFFSET ||
+                      Math.abs(info.velocity.x) > COMMIT_VELOCITY;
+                    if (passed) onCycle?.(band.key, info.offset.x > 0 ? 1 : -1);
+                  }
+                : undefined
+            }
           >
-            <div className="overflow-hidden rounded-2xl shadow-lg ring-1 ring-hairline">
+            {/* Keyed on the garment so swapping a piece replays the entrance. */}
+            <motion.div
+              key={garment.id}
+              className="flex h-full w-full items-center justify-center"
+              initial={animate ? { opacity: 0, scale: 0.94, y: 10 } : false}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 24,
+                delay: animate ? i * 0.07 : 0,
+              }}
+            >
               <GarmentImage
                 garmentId={garment.id}
                 alt={garment.name}
-                className="aspect-square w-full object-cover"
+                className="max-h-full max-w-full object-contain drop-shadow-lg"
               />
-            </div>
+            </motion.div>
+
+            {pos && pos.total > 1 && (
+              <div className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-1">
+                {Array.from({ length: Math.min(pos.total, 6) }).map((_, d) => (
+                  <span
+                    key={d}
+                    className={`h-1 w-1 rounded-full transition-colors ${
+                      d === pos.index % 6 ? "bg-accent" : "bg-hairline"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </motion.div>
         );
       })}

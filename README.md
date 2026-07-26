@@ -1,6 +1,6 @@
 # Fitgod
 
-Photograph the clothes you own. Every day Fitgod picks one outfit from them, shown as a flat-lay collage on a silhouette, with swipeable alternatives behind it.
+Photograph the clothes you own. Every day Fitgod picks one outfit from them, stacked top-to-shoes with the photo backgrounds cut away. Swipe any piece to swap just that piece.
 
 Next.js 14 (App Router) · TypeScript · Tailwind · Framer Motion · Zustand · Supabase · OpenRouter
 
@@ -33,9 +33,19 @@ The jitter is seeded on `(userId, date)` **and** the combination's own id, so th
 
 Above 400 combinations the space is sampled deterministically rather than enumerated.
 
+## Background removal
+
+`lib/cutout.ts` estimates the background from the border pixels, flood-fills inward from the edges, and removes only what is both close to that colour **and** connected to an edge. That last condition is what keeps a white logo in the middle of a black shirt while taking the surround away. The edge is then feathered and the image trimmed to the garment's bounding box, so outfits stack cleanly with no dead space.
+
+It bails out and keeps the original if it would remove more than 92% of the frame (the estimate was wrong) or less than 1% (nothing to gain), so a busy background degrades to the plain photo rather than a destroyed one.
+
+There is deliberately no ML model here: a WASM segmentation model would be tens of megabytes and could not run under the app's CSP. The tradeoff is that this wants a plain, contrasting backdrop — which is what the upload screen asks for.
+
+The cutout is stored as PNG and is what you see. The vision model is still sent the **original** JPEG with its background: a transparent PNG risks being composited onto black, which would erase a black garment entirely.
+
 ## Colour comes from pixels, not from the model
 
-`lib/palette.ts` measures the two or three dominant colours from a 64×64 downsample of the photo, discarding the light background. Vision models are unreliable at naming hex values — they answer `#000000` for charcoal and `#FFFFFF` for cream — and colour harmony is 40% of the score, so model-guessed hexes would quietly skew every ranking. The AI is asked only for category, name, style, warmth and formality.
+`lib/palette.ts` measures the two or three dominant colours from a 64×64 downsample of the **cutout**, so the background can no longer skew them. Vision models are unreliable at naming hex values — they answer `#000000` for charcoal and `#FFFFFF` for cream — and colour harmony is 40% of the score, so model-guessed hexes would quietly skew every ranking. The AI is asked only for category, name, style, warmth and formality.
 
 ## Optional: Supabase
 
@@ -66,8 +76,8 @@ At 512px, tagging costs roughly $0.0005–0.001 per garment, so a 200-item wardr
 
 ```
 app/            routes; api/ai/* route handlers
-components/     UI — OutfitCollage, OutfitDeck (swipe), WaterfallGrid
-lib/            pure domain logic (unit-tested): rotation, colour, palette, seed, dates
+components/     UI — OutfitCollage (stacked, per-piece swipe), OutfitDeck, WaterfallGrid
+lib/            pure domain logic (unit-tested): rotation, colour, palette, cutout, seed, dates
 lib/client/     browser-only: image processing, IndexedDB, storage, AI fetchers
 lib/server/     server-only: OpenRouter, cache + rate limit, auth, service-role client
 store/          zustand, persisted to localStorage (metadata only — photos go to IndexedDB)
@@ -76,4 +86,4 @@ supabase/       migrations
 
 ## Not in v1
 
-Background removal on garment photos, AI-rendered models, weather-aware rotation (the warmth term is already isolated for it), multi-photo garments, an outfit calendar.
+AI-rendered models, weather-aware rotation (the warmth term is already isolated for it), multi-photo garments, an outfit calendar, and background removal for busy (non-plain) backdrops.
