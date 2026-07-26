@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0b;
+  --surface: #141416;
+  --surface-hi: #1c1c1f;
+  --hairline: #26262a;
+  --accent: #c8ff00;
+  --accent-dim: #9bc400;
+  --accent-muted: #4a5a00;
+  --ink: #f2f2f0;
+  --ink-2: #9a9aa0;
+}
+
+html {
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: rgba(200, 255, 0, 0.25);
+}
+
+/* Hairline accent rule used under section headings */
+.accent-rule {
+  height: 1px;
+  background: linear-gradient(to right, var(--accent-muted), transparent);
+}
+
+/* Skeleton shimmer — surfaces only, sized by the consumer (no CLS) */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, #141416 25%, #1c1c1f 50%, #141416 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* Waterfall grid — CSS columns with cards that never split across a column */
+.waterfall > * {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Thin scrollbars that match the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline) transparent;
+}
+
+/* The swipe deck manages its own gestures — never let the browser pan it */
+.no-touch-pan {
+  touch-action: pan-y;
+}

@@ -1,0 +1,79 @@
+# Fitgod
+
+Photograph the clothes you own. Every day Fitgod picks one outfit from them, shown as a flat-lay collage on a silhouette, with swipeable alternatives behind it.
+
+Next.js 14 (App Router) · TypeScript · Tailwind · Framer Motion · Zustand · Supabase · OpenRouter
+
+---
+
+## Running it
+
+```bash
+npm install
+npm run dev
+```
+
+Then open http://localhost:3000. **It works with no configuration at all** — the wardrobe lives in IndexedDB and localStorage, and garment tagging falls back to a manual form. Supabase and OpenRouter are both optional upgrades.
+
+```bash
+npm test          # 70 unit tests over the rotation, colour and palette logic
+npm run build     # production build
+npm run generate-icons   # regenerate PWA icons (output is committed)
+```
+
+## How the daily outfit works
+
+`lib/rotation.ts` ranks every top × bottom × shoes combination and returns the top eight. Rank 1 is today; ranks 2–8 fill the swipe deck.
+
+```
+score = 0.40·colourHarmony + 0.25·formalityMatch + 0.15·warmthCoherence + jitter − recencyPenalty
+```
+
+The jitter is seeded on `(userId, date)` **and** the combination's own id, so the ranking is independent of enumeration order. That means the same day always produces the same outfit no matter how many times you reload — nothing about the daily pick is stored — while tomorrow reshuffles. Recency subtracts 0.5 for any garment worn in the last three days and a further 1.0 for the exact combination within seven.
+
+Above 400 combinations the space is sampled deterministically rather than enumerated.
+
+## Colour comes from pixels, not from the model
+
+`lib/palette.ts` measures the two or three dominant colours from a 64×64 downsample of the photo, discarding the light background. Vision models are unreliable at naming hex values — they answer `#000000` for charcoal and `#FFFFFF` for cream — and colour harmony is 40% of the score, so model-guessed hexes would quietly skew every ranking. The AI is asked only for category, name, style, warmth and formality.
+
+## Optional: Supabase
+
+Copy `.env.example` to `.env.local` and fill in the Supabase values, then:
+
+1. Run `supabase/migrations/001_init.sql` in the SQL editor.
+2. Enable the **Anonymous** provider under Authentication → Providers.
+
+Sign-in happens once, at the end of onboarding. Photos upload to a private `wardrobe` bucket at `{user_id}/{garment_id}.jpg`, with `storage.objects` policies keyed on the path prefix. IndexedDB stays the render source, so signed URLs are only fetched when restoring on a fresh device.
+
+## Optional: OpenRouter
+
+Set `OPENROUTER_API_KEY` for auto-tagging and the daily styling note. Requests are cached by image hash (re-uploads are free) and capped at 20 per user per day.
+
+Model ids verified against OpenRouter on 2026-07-26:
+
+| Role | Model |
+|---|---|
+| Vision primary | `google/gemini-3.1-flash-lite` |
+| Vision fallback | `qwen/qwen3.7-plus` |
+| Text | `google/gemini-3.1-flash-lite` → `deepseek/deepseek-chat` |
+
+> `google/gemini-3-flash-preview` no longer exists on OpenRouter. Do not use it.
+
+At 512px, tagging costs roughly $0.0005–0.001 per garment, so a 200-item wardrobe is well under $0.25 to tag once. The vision fallback is deliberately a different model family; DeepSeek is text-only and cannot serve as one.
+
+## Layout
+
+```
+app/            routes; api/ai/* route handlers
+components/     UI — OutfitCollage, OutfitDeck (swipe), WaterfallGrid
+lib/            pure domain logic (unit-tested): rotation, colour, palette, seed, dates
+lib/client/     browser-only: image processing, IndexedDB, storage, AI fetchers
+lib/server/     server-only: OpenRouter, cache + rate limit, auth, service-role client
+store/          zustand, persisted to localStorage (metadata only — photos go to IndexedDB)
+supabase/       migrations
+```
+
+## Not in v1
+
+Background removal on garment photos, AI-rendered models, weather-aware rotation (the warmth term is already isolated for it), multi-photo garments, an outfit calendar.
