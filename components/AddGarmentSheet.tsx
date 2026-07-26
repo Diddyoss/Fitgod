@@ -5,6 +5,7 @@ import { Camera, ImagePlus, Loader2 } from "lucide-react";
 import Sheet from "./Sheet";
 import TagEditor, { type TagDraft } from "./TagEditor";
 import { processImage } from "@/lib/client/image";
+import type { SegmentStatus } from "@/lib/client/segment";
 import { putImage } from "@/lib/client/imageStore";
 import { dominantColors } from "@/lib/palette";
 import { analyzeGarment } from "@/lib/client/ai";
@@ -39,6 +40,7 @@ export default function AddGarmentSheet({
   const [context, setContext] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [status, setStatus] = useState<SegmentStatus | null>(null);
 
   function reset() {
     if (preview) URL.revokeObjectURL(preview);
@@ -48,6 +50,7 @@ export default function AddGarmentSheet({
     setDraft(EMPTY);
     setContext("");
     setNotice(null);
+    setStatus(null);
     setBusy(false);
   }
 
@@ -64,13 +67,14 @@ export default function AddGarmentSheet({
     setBusy(true);
     setNotice(null);
     try {
-      const processed = await processImage(file);
+      const processed = await processImage(file, setStatus);
+      setStatus(null);
       setBlob(processed.blob);
       setPreview(URL.createObjectURL(processed.blob));
 
       const notes: string[] = [];
-      if (!processed.cutout) {
-        notes.push("Couldn't separate it from the background — a plainer backdrop works better.");
+      if (processed.method === "none") {
+        notes.push("Couldn't isolate the garment — a plainer backdrop works better.");
       }
 
       // Colours are measured from the cutout's pixels, never from the model.
@@ -144,9 +148,9 @@ export default function AddGarmentSheet({
       {!preview ? (
         <div className="space-y-3 pb-2">
           <p className="text-sm text-ink-2">
-            Lay the item flat on a plain background that contrasts with it. Fitgod cuts the
-            background away so outfits show only the clothes — that works best when the surface
-            is one clear colour.
+            Photograph the item on its own. Fitgod cuts the background away so outfits show only
+            the clothes — a plain surface is instant, anything busier falls back to a model that
+            downloads once and then runs on your device.
           </p>
 
           <label
@@ -194,7 +198,20 @@ export default function AddGarmentSheet({
             <div className="flex flex-col justify-center gap-2">
               {busy && (
                 <span className="flex items-center gap-2 text-xs text-ink-2">
-                  <Loader2 size={14} className="animate-spin" /> Reading the photo…
+                  <Loader2 size={14} className="animate-spin" />
+                  {status?.phase === "loading"
+                    ? `Fetching the isolation model… ${status.progress}%`
+                    : status?.phase === "running"
+                      ? "Isolating the garment…"
+                      : "Reading the photo…"}
+                </span>
+              )}
+              {status?.phase === "loading" && (
+                <span className="block h-0.5 w-40 overflow-hidden rounded-full bg-hairline">
+                  <span
+                    className="block h-full bg-accent transition-[width] duration-300"
+                    style={{ width: `${status.progress}%` }}
+                  />
                 </span>
               )}
               {notice && <span className="text-xs text-ink-2">{notice}</span>}

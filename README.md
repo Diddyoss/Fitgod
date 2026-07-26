@@ -35,13 +35,14 @@ Above 400 combinations the space is sampled deterministically rather than enumer
 
 ## Background removal
 
-`lib/cutout.ts` estimates the background from the border pixels, flood-fills inward from the edges, and removes only what is both close to that colour **and** connected to an edge. That last condition is what keeps a white logo in the middle of a black shirt while taking the surround away. The edge is then feathered and the image trimmed to the garment's bounding box, so outfits stack cleanly with no dead space.
+Two-tier, fast path first:
 
-It bails out and keeps the original if it would remove more than 92% of the frame (the estimate was wrong) or less than 1% (nothing to gain), so a busy background degrades to the plain photo rather than a destroyed one.
+1. **Flood fill** (`lib/cutout.ts`) — estimates the backdrop from the border pixels, fills inward from the edges, and removes only what is both close to that colour **and** connected to an edge (which is what keeps a white logo in the middle of a black shirt). Instant and free, but only works on a plain surface.
+2. **Segmentation model** (`lib/client/segment.ts`) — when the flood fill can't clear at least 85% of the outer pixel ring (`borderClearedFraction` — a partial nibble on a textured backdrop "succeeds" by percentage removed, so that signal is useless), an RMBG segmentation model takes over. It runs entirely in the browser via Transformers.js — weights download once (~40MB), the browser caches them, and photos never leave the device. WebGPU when available, WASM otherwise.
 
-There is deliberately no ML model here: a WASM segmentation model would be tens of megabytes and could not run under the app's CSP. The tradeoff is that this wants a plain, contrasting backdrop — which is what the upload screen asks for.
+Transformers.js is loaded from jsDelivr at runtime (`NEXT_PUBLIC_TRANSFORMERS_URL` / `NEXT_PUBLIC_SEGMENT_MODEL` to override) rather than installed: it ships ONNX Runtime as pre-minified ESM that Next's compiler cannot parse, and the many uploads that take the fast path never pay for it.
 
-The cutout is stored as PNG and is what you see. The vision model is still sent the **original** JPEG with its background: a transparent PNG risks being composited onto black, which would erase a black garment entirely.
+Either way the edge is feathered, the image trimmed to the garment's bounding box, and the cutout stored as PNG — that's what you see. The vision model is still sent the **original** JPEG with its background: a transparent PNG risks being composited onto black, which would erase a black garment entirely.
 
 ## Colour comes from pixels, not from the model
 
@@ -86,4 +87,4 @@ supabase/       migrations
 
 ## Not in v1
 
-AI-rendered models, weather-aware rotation (the warmth term is already isolated for it), multi-photo garments, an outfit calendar, and background removal for busy (non-plain) backdrops.
+AI-rendered models, weather-aware rotation (the warmth term is already isolated for it), multi-photo garments, an outfit calendar, self-hosted segmentation weights.

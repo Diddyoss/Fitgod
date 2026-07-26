@@ -145,13 +145,26 @@ export function removeBackground(
     if (mask[px]) out[px * 4 + 3] = 0;
   }
 
-  // Soften the cut edge — a hard binary mask reads as jagged at display size.
+  featherAlpha(out, width, height);
+
+  const bbox = boundingBoxOfOpaque(out, width, height);
+  if (!bbox) return untouched();
+
+  return { data: out, bbox, removed: fraction, applied: true };
+}
+
+/**
+ * Soften a hard mask edge — a binary cut reads as jagged at display size.
+ * Interiors stay fully opaque; only boundary pixels are averaged. In place.
+ */
+export function featherAlpha(rgba: Uint8ClampedArray, width: number, height: number): void {
+  const total = width * height;
   const alpha = new Uint8ClampedArray(total);
-  for (let px = 0; px < total; px++) alpha[px] = out[px * 4 + 3];
+  for (let px = 0; px < total; px++) alpha[px] = rgba[px * 4 + 3];
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const px = y * width + x;
-      // Only touch the boundary; interiors stay fully opaque.
       if (alpha[px] === 0) continue;
       let sum = 0;
       let n = 0;
@@ -167,18 +180,55 @@ export function removeBackground(
           n++;
         }
       }
-      if (edge && n > 0) out[px * 4 + 3] = sum / n;
+      if (edge && n > 0) rgba[px * 4 + 3] = sum / n;
     }
   }
+}
 
-  // Trim to what survived.
+/**
+ * Fraction of the outer 1px ring that is now transparent. After a genuine
+ * background sweep this approaches 1 (the backdrop touches the frame edge
+ * almost everywhere); a partial nibble on a textured backdrop leaves most of
+ * the ring opaque. Used to decide whether a flood-fill result can be trusted.
+ */
+export function borderClearedFraction(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): number {
+  if (width === 0 || height === 0) return 0;
+  let cleared = 0;
+  let total = 0;
+  const check = (px: number) => {
+    total++;
+    if (rgba[px * 4 + 3] <= 8) cleared++;
+  };
+  for (let x = 0; x < width; x++) {
+    check(x);
+    if (height > 1) check((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    check(y * width);
+    if (width > 1) check(y * width + width - 1);
+  }
+  return total ? cleared / total : 0;
+}
+
+/** Tight box around everything still opaque, or null if nothing survived. */
+export function boundingBoxOfOpaque(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  threshold = 8,
+): { x: number; y: number; w: number; h: number } | null {
   let minX = width;
   let minY = height;
   let maxX = -1;
   let maxY = -1;
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (out[(y * width + x) * 4 + 3] > 8) {
+      if (rgba[(y * width + x) * 4 + 3] > threshold) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -186,12 +236,6 @@ export function removeBackground(
       }
     }
   }
-  if (maxX < minX || maxY < minY) return untouched();
-
-  return {
-    data: out,
-    bbox: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
-    removed: fraction,
-    applied: true,
-  };
+  if (maxX < minX || maxY < minY) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }

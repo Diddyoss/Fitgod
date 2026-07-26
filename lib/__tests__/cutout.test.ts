@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { removeBackground } from "../cutout";
+import { borderClearedFraction, removeBackground } from "../cutout";
 
 /** Build an RGBA image from a paint callback. */
 function image(
@@ -129,5 +129,32 @@ describe("removeBackground", () => {
   it("survives degenerate input", () => {
     expect(removeBackground(new Uint8ClampedArray(0), 0, 0).applied).toBe(false);
     expect(removeBackground(new Uint8ClampedArray(4), 5, 5).applied).toBe(false);
+  });
+});
+
+describe("borderClearedFraction", () => {
+  it("approaches 1 after a genuine sweep", () => {
+    const res = removeBackground(garmentOnWhite(), 40, 40);
+    expect(borderClearedFraction(res.data, 40, 40)).toBeGreaterThan(0.95);
+  });
+
+  it("stays low when the background survives", () => {
+    // Untouched image: nothing transparent anywhere.
+    expect(borderClearedFraction(garmentOnWhite(), 40, 40)).toBe(0);
+  });
+
+  it("is reduced but not destroyed by a garment cropped at the frame edge", () => {
+    // Bottom half is garment running off the frame; top and sides still clear.
+    const src = image(40, 40, (x, y) => (y >= 20 ? RED : WHITE));
+    const res = removeBackground(src, 40, 40);
+    const f = borderClearedFraction(res.data, 40, 40);
+    expect(f).toBeGreaterThan(0.3);
+    expect(f).toBeLessThan(0.85);
+  });
+
+  it("handles degenerate sizes", () => {
+    expect(borderClearedFraction(new Uint8ClampedArray(0), 0, 0)).toBe(0);
+    const single = new Uint8ClampedArray([10, 10, 10, 0]);
+    expect(borderClearedFraction(single, 1, 1)).toBe(1);
   });
 });
