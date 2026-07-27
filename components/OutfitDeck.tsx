@@ -9,6 +9,7 @@ import {
   type PanInfo,
 } from "framer-motion";
 import { X } from "lucide-react";
+import BodyPortal from "./BodyPortal";
 import OutfitCollage from "./OutfitCollage";
 import { resolveOutfit } from "@/lib/rotation";
 import { outfitKey, type Garment, type Outfit } from "@/lib/types";
@@ -54,6 +55,7 @@ export default function OutfitDeck({
   }
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-50 flex flex-col bg-base/95 backdrop-blur-sm">
       <div className="flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))]">
         <div>
@@ -165,5 +167,6 @@ export default function OutfitDeck({
         </div>
       )}
     </div>
+    </BodyPortal>
   );
 }

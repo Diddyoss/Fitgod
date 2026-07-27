@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import BodyPortal from "@/components/BodyPortal";
 import SectionHeading from "@/components/SectionHeading";
 import WaterfallGrid from "@/components/WaterfallGrid";
 import GarmentCard from "@/components/GarmentCard";
@@ -31,21 +32,11 @@ export default function WardrobePage() {
 
   return (
     <>
-      <header className="mb-5 flex items-start justify-between">
-        <div>
-          <h1 className="font-display text-3xl tracking-display">Wardrobe</h1>
-          <p className="mt-1 text-sm text-ink-2">
-            {garments.length} {garments.length === 1 ? "piece" : "pieces"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          aria-label="Add a garment"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-base"
-        >
-          <Plus size={22} />
-        </button>
+      <header className="mb-5">
+        <h1 className="font-display text-3xl tracking-display">Wardrobe</h1>
+        <p className="mt-1 text-sm text-ink-2">
+          {garments.length} {garments.length === 1 ? "piece" : "pieces"}
+        </p>
       </header>
 
       <div className="mb-5 flex flex-wrap gap-1.5">
@@ -92,6 +83,21 @@ export default function WardrobePage() {
           </WaterfallGrid>
         </>
       )}
+
+      <BodyPortal>
+        <div className="pointer-events-none fixed inset-x-0 bottom-28 z-30 flex justify-center">
+          <div className="flex w-full max-w-md justify-end px-5 sm:max-w-lg md:max-w-2xl">
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              aria-label="Add a garment"
+              className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent text-base shadow-lg shadow-black/40"
+            >
+              <Plus size={24} />
+            </button>
+          </div>
+        </div>
+      </BodyPortal>
 
       <AddGarmentSheet open={adding} onClose={() => setAdding(false)} />
       <GarmentDetailSheet garment={selected} onClose={() => setSelected(null)} />
